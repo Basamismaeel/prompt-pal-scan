@@ -9,9 +9,12 @@ export function parseAiRiskScore(content: string): number | null {
   }
   if (content.length < 150) return null;
   const lower = content.toLowerCase();
+  const hasNoOrLowRisk =
+    /\b(no|minimal|low|negligible)\s+(sensitive|risk|exposure|concern)|safe\s+to\s+share|nothing\s+(to\s+)?(worry|concern)|no\s+sensitive\s+(content|patterns|data)|no\s+significant\s+risk/.test(lower);
+  if (hasNoOrLowRisk) return null;
   const hasContextualRisk =
-    /internal\s+infrastructure|IIE|passive\s+reconnaissance|internal\s+(naming|domain|exposure)|contextual\s+(risk|exposure)|organizational\s+domain|network\s+entry\s+points/.test(lower) ||
-    (/\b(internal|exposure|infrastructure|reconnaissance)\b/.test(lower) && /\b(risk|domain|naming|structure)\b/.test(lower));
+    /(?:text\s+contains?|reveals?|identifies?|includes?|shows?)\s+.*(?:internal\s+infrastructure|IIE|passive\s+reconnaissance|internal\s+(naming|domain|exposure)|contextual\s+(risk|exposure)|organizational\s+domain|network\s+entry)/.test(lower) ||
+    /internal\s+infrastructure\s+exposure\s*\(IIE\)|passive\s+reconnaissance/.test(lower);
   if (hasContextualRisk) return 45;
   return null;
 }
