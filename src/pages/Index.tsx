@@ -109,14 +109,14 @@ const Index = () => {
           >
             {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
           </Button>
-          <span className="text-[10px] text-muted-foreground hidden sm:inline">Examples:</span>
-          <Button size="sm" variant="ghost" className="text-xs text-safe h-7" onClick={() => loadExample("clean")}>
+          <span className="text-xs text-muted-foreground font-medium">Try example:</span>
+          <Button size="sm" variant="outline" className="text-xs text-safe h-8 border-safe/40 hover:bg-safe/10" onClick={() => loadExample("clean")}>
             Clean
           </Button>
-          <Button size="sm" variant="ghost" className="text-xs text-warning h-7" onClick={() => loadExample("mixed")}>
+          <Button size="sm" variant="outline" className="text-xs text-warning h-8 border-warning/40 hover:bg-warning/10" onClick={() => loadExample("mixed")}>
             Mixed
           </Button>
-          <Button size="sm" variant="ghost" className="text-xs text-danger h-7" onClick={() => loadExample("dangerous")}>
+          <Button size="sm" variant="outline" className="text-xs text-danger h-8 border-danger/40 hover:bg-danger/10" onClick={() => loadExample("dangerous")}>
             Dangerous
           </Button>
         </div>
@@ -126,6 +126,9 @@ const Index = () => {
       <div className="flex flex-1 flex-col lg:flex-row gap-0">
         {/* Left panel — Input */}
         <div className="flex flex-col lg:w-[45%] border-r border-border p-4 gap-3">
+          <p className="text-xs text-muted-foreground -mb-1">
+            Paste your text below, or use an example above (Clean, Mixed, Dangerous) then click Scan.
+          </p>
           <div className="flex items-center justify-between">
             <span className="text-xs uppercase tracking-wider text-muted-foreground font-sans">Input</span>
             <Button
