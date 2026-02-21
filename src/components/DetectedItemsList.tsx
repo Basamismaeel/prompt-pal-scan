@@ -1,3 +1,4 @@
+import { ShieldCheck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { ScanMatch } from "@/lib/scanner";
@@ -10,7 +11,7 @@ export function DetectedItemsList({ matches }: DetectedItemsListProps) {
   if (matches.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center rounded-lg border border-border bg-card p-6 text-center">
-        <span className="text-2xl mb-2">🛡️</span>
+        <ShieldCheck className="h-8 w-8 mb-2 text-muted-foreground" aria-hidden />
         <span className="text-sm text-muted-foreground">No sensitive patterns detected</span>
       </div>
     );

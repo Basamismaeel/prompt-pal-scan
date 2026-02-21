@@ -1,26 +1,40 @@
-import { useState, useCallback } from "react";
-import { Shield, Scan, Zap } from "lucide-react";
+import { useState, useCallback, useRef, useEffect } from "react";
+import { Shield, Scan, Zap, Wrench, Sun, Moon } from "lucide-react";
+import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
 import { TextInput } from "@/components/TextInput";
 import { RiskGauge } from "@/components/RiskGauge";
 import { DetectedItemsList } from "@/components/DetectedItemsList";
 import { HighlightedPreview } from "@/components/HighlightedPreview";
 import { AiAnalysis } from "@/components/AiAnalysis";
-import { scanText, EXAMPLES, type ScanResult } from "@/lib/scanner";
-import { streamAnalysis } from "@/lib/ai-stream";
+import { scanText, redactDetectedSecrets, EXAMPLES, type ScanResult } from "@/lib/scanner";
+import { streamAnalysis, parseAiRiskScore } from "@/lib/ai-stream";
 import { useToast } from "@/hooks/use-toast";
 
 const Index = () => {
   const [text, setText] = useState("");
+  const textRef = useRef(text);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  textRef.current = text;
+
   const [result, setResult] = useState<ScanResult | null>(null);
   const [aiContent, setAiContent] = useState("");
+  const [aiRiskScore, setAiRiskScore] = useState<number | null>(null);
   const [isStreaming, setIsStreaming] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
   const [isScanning, setIsScanning] = useState(false);
   const { toast } = useToast();
+  const { theme, setTheme } = useTheme();
+
+  useEffect(() => {
+    const score = parseAiRiskScore(aiContent);
+    setAiRiskScore(score !== null ? score : null);
+  }, [aiContent]);
 
   const handleScan = useCallback(() => {
-    if (!text.trim()) {
+    const fromDom = inputRef.current?.value;
+    const valueToScan = (fromDom !== undefined && fromDom !== null ? fromDom : textRef.current) ?? "";
+    if (!valueToScan.trim()) {
       toast({ title: "Empty input", description: "Paste some text to scan.", variant: "destructive" });
       return;
     }
@@ -28,26 +42,42 @@ const Index = () => {
     setIsScanning(true);
     setAiContent("");
     setAiError(null);
+    setAiRiskScore(null);
 
-    // Run regex scan
-    const scanResult = scanText(text);
+    const scanResult = scanText(valueToScan);
     setResult(scanResult);
     setIsScanning(false);
 
-    // Start AI streaming analysis
     setIsStreaming(true);
     streamAnalysis({
-      text,
+      text: valueToScan,
       findings: scanResult.matches,
       onDelta: (chunk) => setAiContent((prev) => prev + chunk),
       onDone: () => setIsStreaming(false),
       onError: (err) => {
         setAiError(err);
         setIsStreaming(false);
-        toast({ title: "AI Analysis Error", description: err, variant: "destructive" });
+        const isConfigError = /API_KEY|must be set|not configured/i.test(err);
+        if (!isConfigError) toast({ title: "AI Analysis Error", description: err, variant: "destructive" });
       },
     });
-  }, [text, toast]);
+  }, [toast]);
+
+  const handleFix = useCallback(() => {
+    const fromDom = inputRef.current?.value;
+    const value = (fromDom !== undefined && fromDom !== null ? fromDom : textRef.current) ?? "";
+    if (!value.trim()) {
+      toast({ title: "Empty input", description: "Paste text to fix.", variant: "destructive" });
+      return;
+    }
+    const fixedText = redactDetectedSecrets(value);
+    if (fixedText === value) {
+      toast({ title: "Nothing to fix", description: "No sensitive patterns detected." });
+      return;
+    }
+    setText(fixedText);
+    toast({ title: "Prompt fixed", description: "Secrets redacted. Re-scan to verify." });
+  }, [toast]);
 
   const loadExample = (key: keyof typeof EXAMPLES) => {
     setText(EXAMPLES[key]);
@@ -63,13 +93,22 @@ const Index = () => {
         <div className="flex items-center gap-2">
           <Shield className="h-5 w-5 text-primary" />
           <h1 className="font-sans text-lg font-bold text-foreground">
-            PromptGuard
+            Contextify
           </h1>
           <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
             Prompt Security Scanner
           </span>
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-8 w-8 p-0"
+            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+            aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+          >
+            {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+          </Button>
           <span className="text-[10px] text-muted-foreground hidden sm:inline">Examples:</span>
           <Button size="sm" variant="ghost" className="text-xs text-safe h-7" onClick={() => loadExample("clean")}>
             Clean
@@ -101,8 +140,21 @@ const Index = () => {
               )}
             </Button>
           </div>
-          <div className="flex-1 min-h-[300px] lg:min-h-0">
-            <TextInput value={text} onChange={setText} />
+          <div className="flex-1 min-h-[300px] lg:min-h-0 flex flex-col rounded-lg border border-border bg-card overflow-hidden">
+            <div className="flex-1 min-h-0">
+              <TextInput ref={inputRef} value={text} onChange={setText} noBorder />
+            </div>
+            <div className="flex justify-end border-t border-border p-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={handleFix}
+                className="font-sans gap-2"
+              >
+                <Wrench className="h-4 w-4" />
+                Fix
+              </Button>
+            </div>
           </div>
         </div>
 
@@ -110,7 +162,7 @@ const Index = () => {
         <div className="flex-1 p-4 space-y-4 overflow-auto">
           {/* Top row: gauge + detected items */}
           <div className="grid grid-cols-1 md:grid-cols-[auto_1fr] gap-4">
-            <RiskGauge result={result} />
+            <RiskGauge result={result} aiRiskScore={aiRiskScore} />
             <div>
               <span className="text-xs uppercase tracking-wider text-muted-foreground font-sans mb-2 block">
                 Detected Items ({result?.matches.length ?? 0})

@@ -1,5 +1,26 @@
 import type { ScanMatch } from "./scanner";
 
+/** Parse RISK_SCORE: N from AI stream content (0-100). Returns null if not found or invalid. */
+export function parseAiRiskScore(content: string): number | null {
+  const m = content.match(/RISK_SCORE:\s*(\d+)/i);
+  if (m) {
+    const n = parseInt(m[1], 10);
+    if (!Number.isNaN(n)) return Math.max(0, Math.min(100, n));
+  }
+  if (content.length < 150) return null;
+  const lower = content.toLowerCase();
+  const hasContextualRisk =
+    /internal\s+infrastructure|IIE|passive\s+reconnaissance|internal\s+(naming|domain|exposure)|contextual\s+(risk|exposure)|organizational\s+domain|network\s+entry\s+points/.test(lower) ||
+    (/\b(internal|exposure|infrastructure|reconnaissance)\b/.test(lower) && /\b(risk|domain|naming|structure)\b/.test(lower));
+  if (hasContextualRisk) return 45;
+  return null;
+}
+
+/** Remove the leading RISK_SCORE line from content so it is not shown in the UI. */
+export function stripRiskScoreLine(content: string): string {
+  return content.replace(/^\s*RISK_SCORE:\s*\d+\s*\n?/i, "").trimStart();
+}
+
 const SCAN_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/scan-analyze`;
 
 export async function streamAnalysis({

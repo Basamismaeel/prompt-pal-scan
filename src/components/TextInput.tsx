@@ -1,13 +1,20 @@
-import { useRef, useEffect, useState } from "react";
+import { useRef, useEffect, useState, forwardRef } from "react";
 
 interface TextInputProps {
   value: string;
   onChange: (value: string) => void;
+  /** When true, omit outer border (e.g. when inside a card that provides it). */
+  noBorder?: boolean;
 }
 
-export function TextInput({ value, onChange }: TextInputProps) {
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+export const TextInput = forwardRef<HTMLTextAreaElement, TextInputProps>(function TextInput({ value, onChange, noBorder }, ref) {
   const lineNumbersRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const setRefs = (el: HTMLTextAreaElement | null) => {
+    (textareaRef as React.MutableRefObject<HTMLTextAreaElement | null>).current = el;
+    if (typeof ref === "function") ref(el);
+    else if (ref) ref.current = el;
+  };
   const [lineCount, setLineCount] = useState(1);
 
   useEffect(() => {
@@ -22,7 +29,7 @@ export function TextInput({ value, onChange }: TextInputProps) {
   };
 
   return (
-    <div className="flex h-full rounded-lg border border-border bg-card overflow-hidden">
+    <div className={`flex h-full overflow-hidden ${noBorder ? "" : "rounded-lg border border-border bg-card"}`}>
       {/* Line numbers */}
       <div
         ref={lineNumbersRef}
@@ -39,7 +46,7 @@ export function TextInput({ value, onChange }: TextInputProps) {
       </div>
       {/* Text area */}
       <textarea
-        ref={textareaRef}
+        ref={setRefs}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         onScroll={handleScroll}
@@ -49,4 +56,4 @@ export function TextInput({ value, onChange }: TextInputProps) {
       />
     </div>
   );
-}
+});

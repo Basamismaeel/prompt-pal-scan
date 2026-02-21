@@ -14,10 +14,12 @@ serve(async (req) => {
   try {
     const { text, findings } = await req.json();
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured");
+    const apiKey = Deno.env.get("AI_API_KEY") ?? Deno.env.get("OPENAI_API_KEY");
+    if (!apiKey) {
+      throw new Error("AI_API_KEY or OPENAI_API_KEY must be set in Supabase Edge Function secrets");
     }
+
+    const gatewayUrl = Deno.env.get("AI_GATEWAY_URL") ?? "https://api.openai.com/v1/chat/completions";
 
     const findingsSummary = findings
       .map(
@@ -26,16 +28,34 @@ serve(async (req) => {
       )
       .join("\n");
 
-    const systemPrompt = `You are a security analyst specializing in detecting sensitive information in text that users are about to send to AI models. You provide clear, actionable analysis.
+    const systemPrompt = `You are a security analyst for Contextify. Classify sensitivity per this doctrine:
 
-Your task: Analyze the provided text for confidentiality risks. The regex scanner has already found some matches — confirm, expand, or correct them. Also look for risks the regex missed (e.g., contextual secrets, internal project names, proprietary data).
+SCORE BANDS (contextualRiskScore):
+- LOW (0-25): No sensitive elements. Public content, generic descriptions, educational, open-source, docs, no credentials or internal specifics. Never exceed 30 if no sensitive elements exist.
+- MEDIUM (30-60): Contextual exposure only. Internal domains (.internal, .corp), infrastructure disclosure (hostnames, S3 buckets, internal APIs), partial configs, roadmap/strategy/revenue/KPIs, proprietary technical details (algorithms, model architecture, fraud/risk logic), partial JWT, internal emails, admin/root mentions. No direct exploitability.
+- HIGH (75-100): Only when credentials or immediately exploitable secrets exist: API keys, passwords, connection strings, private keys, full JWT, OAuth tokens, hardcoded secrets. If regex already found these, your score should reflect severity; do not under-score.
 
-Format your response as:
-1. **Risk Summary** — one paragraph overview
-2. **Detailed Findings** — bullet list of each sensitive item, why it's risky, and what to do
-3. **Recommendations** — practical steps to sanitize the text before sending to an AI
+RULES:
+1. Assign HIGH (75-100) only if credentials or exploit-ready secrets exist.
+2. Assign MEDIUM (30-60) for contextual but non-exploitable exposure (internal domains, roadmaps, partial configs, proprietary logic).
+3. Assign LOW (0-25) for general descriptions, public content, code examples without secrets.
+4. Never exceed 30 if no sensitive elements exist.
 
-Be concise, direct, and security-focused. Use terminal-style language.`;
+Output plain text only. No markdown: no #, no **, no *, no bullets, no backticks.
+
+CRITICAL: Your very first line of the response must be exactly: RISK_SCORE: N
+where N is an integer 0-100. You MUST output this line before any other text. If you identify Internal Infrastructure Exposure (IIE), internal naming, domain structure, passive reconnaissance, or similar contextual risk, N must be 30-60 (medium). Only use 0-25 when there is no sensitive or contextual exposure. After that line, a blank line, then:
+
+RISK SUMMARY
+One short paragraph: what was found and the main risk.
+
+FINDINGS
+One line per finding. Item, then dash, then risk and action. No bullets.
+
+RECOMMENDATIONS
+One line per step. 3 to 5 concrete steps. No numbers or bullets.
+
+Use blank lines between sections. Be concise.`;
 
     const userPrompt = `## Text to analyze:
 \`\`\`
@@ -47,16 +67,14 @@ ${findingsSummary || "No patterns detected by regex scanner."}
 
 Analyze this text for confidentiality and security risks.`;
 
-    const response = await fetch(
-      "https://ai.gateway.lovable.dev/v1/chat/completions",
-      {
+    const response = await fetch(gatewayUrl, {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${LOVABLE_API_KEY}`,
+          Authorization: `Bearer ${apiKey}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "google/gemini-3-flash-preview",
+          model: Deno.env.get("AI_MODEL") ?? "gpt-4o-mini",
           messages: [
             { role: "system", content: systemPrompt },
             { role: "user", content: userPrompt },
@@ -75,12 +93,12 @@ Analyze this text for confidentiality and security risks.`;
       }
       if (response.status === 402) {
         return new Response(
-          JSON.stringify({ error: "AI credits exhausted. Please add credits in Settings → Workspace → Usage." }),
+          JSON.stringify({ error: "AI API quota or billing issue. Check your API key and usage." }),
           { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
       const t = await response.text();
-      console.error("AI gateway error:", response.status, t);
+      console.error("AI API error:", response.status, t);
       return new Response(
         JSON.stringify({ error: "AI analysis failed" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }

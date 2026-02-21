@@ -3,11 +3,20 @@ import type { ScanResult } from "@/lib/scanner";
 
 interface RiskGaugeProps {
   result: ScanResult | null;
+  /** AI-derived risk score (0-100). Combined with regex score for display. */
+  aiRiskScore?: number | null;
 }
 
-export function RiskGauge({ result }: RiskGaugeProps) {
+export function RiskGauge({ result, aiRiskScore = null }: RiskGaugeProps) {
   const [animatedScore, setAnimatedScore] = useState(0);
-  const score = result?.totalScore ?? 0;
+  const regexScore = result?.totalScore ?? 0;
+  const contextualScore = aiRiskScore ?? 0;
+  const score = Math.min(
+    100,
+    result?.hasHighRiskMatch
+      ? Math.max(regexScore, 75)
+      : Math.max(regexScore, contextualScore)
+  );
 
   useEffect(() => {
     setAnimatedScore(0);
@@ -17,7 +26,6 @@ export function RiskGauge({ result }: RiskGaugeProps) {
     const animate = (now: number) => {
       const elapsed = now - start;
       const progress = Math.min(elapsed / duration, 1);
-      // Ease-out
       const eased = 1 - Math.pow(1 - progress, 3);
       setAnimatedScore(Math.round(score * eased));
       if (progress < 1) requestAnimationFrame(animate);
@@ -25,7 +33,8 @@ export function RiskGauge({ result }: RiskGaugeProps) {
     requestAnimationFrame(animate);
   }, [score]);
 
-  const riskLevel = result?.riskLevel ?? "safe";
+  const riskLevel: ScanResult["riskLevel"] =
+    score <= 30 ? "safe" : score <= 60 ? "warning" : "high-risk";
   const circumference = 2 * Math.PI * 45;
   const offset = circumference - (circumference * animatedScore) / 100;
 
